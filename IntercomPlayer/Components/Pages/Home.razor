@@ -1,0 +1,49 @@
+@page "/"
+@implements IDisposable
+@inject IJSRuntime JS
+@inject StreamStatus Status
+
+<PageTitle>Gareeva Intercom</PageTitle>
+
+<main class="player-page">
+    <h1>Gareeva Intercom</h1>
+
+    <video id="intercom-video" controls autoplay muted playsinline></video>
+    <p class="hint">Звук по умолчанию выключен (браузеры блокируют автозапуск со звуком): включите его кнопкой на плеере.</p>
+
+    <dl class="status">
+        <dt>Состояние</dt><dd>@Status.State</dd>
+        <dt>Принято</dt><dd>@FormatBytes(Status.Bytes)</dd>
+        <dt>Кадров видео</dt><dd>@Status.VideoFrames</dd>
+        <dt>Кадров аудио</dt><dd>@Status.AudioFrames @(Status.AudioInfo is null ? "(в потоке звука нет, подаётся тишина)" : $"({Status.AudioInfo})")</dd>
+        <dt>Время устройства</dt><dd>@(Status.DeviceTime?.ToString("dd.MM.yyyy HH:mm:ss") ?? "—")</dd>
+        @if (Status.LastError is not null)
+        {
+            <dt>Ошибка</dt><dd class="error">@Status.LastError</dd>
+        }
+    </dl>
+</main>
+
+@code {
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, 1000, 1000);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("intercomPlayer.start", "intercom-video", "/hls/stream.m3u8");
+    }
+
+    private static string FormatBytes(long n) =>
+        n < 1024 * 1024 ? $"{n / 1024.0:F0} КБ" : $"{n / 1024.0 / 1024.0:F1} МБ";
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _ = JS.InvokeVoidAsync("intercomPlayer.stop").AsTask().ContinueWith(_ => { });
+    }
+}
